@@ -133,7 +133,7 @@ def get_features_targets_des1(data):
     # features[:, 7] = data['WAVG_MAG_PSF_Z'] - data['WAVG_MAG_PSF_Y']
     features[:, 4] = data["MAG_AUTO_I"].values
 
-    targets = data['z']
+    targets = data['z'].values
     return features, targets
 
 
@@ -156,7 +156,7 @@ def get_features_targets_des2(data):
     # features[:, 7] = data['WAVG_MAG_PSF_Z_DERED'] - data['WAVG_MAG_PSF_Y_DERED']
     features[:, 4] = data["MAG_AUTO_I_DERED"].values
 
-    targets = data['z']
+    targets = data['z'].values
     return features, targets
 
 
@@ -225,11 +225,11 @@ def rmse_loss_keras(y_true, y_pred):
         (y_pred - y_true) / (keras.backend.abs(y_true) + 1))
     return keras.backend.sqrt(keras.backend.mean(diff))
 
-
-def build_nn(n_inputs, shape, l2_rate=1e-5, l1_rate=1e-4, kernel_initializer, act_type="tanh",
+'''
+def build_nn(input_dim, shape, l2_rate=1e-5, l1_rate=1e-4, kernel_initializer, act_type="tanh",
 opt_type = ks.optimizers.RMSprop(),n_neurons = 10):
 
-    ann_model = Sequential([Dense(n_inputs, input_shape=shape, kernel_regularizer=regularizers.l1_l2(l1=l1_rate, l2=l2_rate),
+    ann_model = Sequential([Dense(n_inputs=input_dim, input_shape=shape, kernel_regularizer=regularizers.l1_l2(l1=l1_rate, l2=l2_rate),
                                   bias_regularizer=regularizers.l2(l2_rate), activity_regularizer=regularizers.l2(l2_rate)),
                             Dense(n_neurons, kernel_initializer=kernel_init,  kernel_constraint=max_norm(2.5), activation=act_type, kernel_regularizer=regularizers.l1_l2(l1=l1_rate, l2=l2_rate),
                                   bias_regularizer=regularizers.l2(l2_rate), activity_regularizer=regularizers.l2(l2_rate)),
@@ -240,15 +240,15 @@ opt_type = ks.optimizers.RMSprop(),n_neurons = 10):
                             ])
     opt = opt_type
     ann_model.compile(optimizer=opt, loss=rmse_ann, metrics=[
-                      'mse', 'mae', 'mape', rmse_ann])
+                      'mse', 'mae', rmse_ann])
 
     return ann_model
 
-
+'''
 def model_nn(input_dim, n_hidden_layers, dropout=0, batch_normalization=False,
              activation='relu', neurons_decay=0, starting_power=1, l2=0,
              compile_model=True, trainable=True):
-    """Define an ANN with defatul relu activation"""
+    """Define an ANN with tanh activation"""
 
     assert dropout >= 0 and dropout < 1
     assert batch_normalization in {True, False}
@@ -268,7 +268,7 @@ def model_nn(input_dim, n_hidden_layers, dropout=0, batch_normalization=False,
         if batch_normalization:
             model.add(BatchNormalization(
                 name='BatchNormalization_' + str(layer + 1)))
-        model.add(Activation('relu', name='Activation_' + str(layer + 1)))
+        model.add(Activation('tanh', name='Activation_' + str(layer + 1)))
         if dropout > 0:
             model.add(Dropout(dropout, name='Dropout_' + str(layer + 1)))
 
