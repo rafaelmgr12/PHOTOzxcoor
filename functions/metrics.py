@@ -22,3 +22,14 @@ def scatter(z_phot,z_spec):
 
 	return sigma
 
+def compute_metrics(y_true, y_pred, clf_name):
+    result = pd.Series()
+    delta_znorm = (y_pred - y_true)/(1 + y_true)
+    result.loc['RMSE_znorm'] = np.sqrt(np.mean((delta_znorm)**2))
+    result.loc['bias_znorm'] = np.mean(delta_znorm)
+    result.loc['std_znorm'] = np.std(delta_znorm)
+    result.loc['RMSE'] = np.sqrt(np.mean((y_pred - y_true)**2))
+    result.loc['|znorm| > 0.15 (%)'] = 100*np.sum(np.abs(delta_znorm) > 0.15)/y_true.shape[0]
+    result.loc['|znorm| > 3std (%)'] = 100*np.sum(np.abs(delta_znorm) > 3*np.std(delta_znorm))/y_true.shape[0]
+    result.name = clf_name
+    return result 
