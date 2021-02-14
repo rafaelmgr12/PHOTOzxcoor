@@ -24,7 +24,7 @@ from sklearn.ensemble import RandomForestRegressor,  GradientBoostingRegressor, 
 
 home = os.getenv("HOME")
 
-# user here the path where we download the folder DESzxcoorr
+# user here the path where we download the folder PHOTOzxcorr
 sys.path.append(home+"/Projetos/PHOTOzxcorr/functions/")
 
 vipers = pd.read_csv("/home/rafael/Projetos/PHOTOzxcorr/data/viper_clean.csv")
