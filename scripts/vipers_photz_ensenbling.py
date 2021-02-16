@@ -76,9 +76,79 @@ y = rob2.fit_transform(y.reshape(-1,1))
 
 X_train, X_test, y_train, y_test = ml.tts_split(X, y, 0.3, 5)
 
-stack = StackingCVRegressor(regressors=(models[0:8]),
+BATCH_SIZE = 64
+STEPS_PER_EPOCH = len(X_train)//BATCH_SIZE
+lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
+  0.001,
+  decay_steps=STEPS_PER_EPOCH*1000,
+  decay_rate=1,
+  staircase=False)
+
+def build_nn():
+
+    ann_model = Sequential([Dense(n_inputs,input_shape = X_train.shape[1:],kernel_initializer='normal', kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                              bias_regularizer=regularizers.l2(1e-4),activity_regularizer=regularizers.l2(1e-5)),
+                       Dense(10, kernel_initializer='normal',  kernel_constraint=max_norm(2.5) ,activation='tanh',kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                              bias_regularizer=regularizers.l2(1e-4),activity_regularizer=regularizers.l2(1e-5)),
+                       BatchNormalization(),
+                       Dense(10,kernel_initializer='normal', kernel_constraint=max_norm(2.5) ,activation='tanh',kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                              bias_regularizer=regularizers.l2(1e-4),activity_regularizer=regularizers.l2(1e-5)) ,
+                       Dense(1,activation = None,name = "output")
+                       ])
+    opt = ks.optimizers.RMSprop(lr_schedule)
+    #opt = tf.keras.optimizers.RMSprop(0.001)
+    ann_model.compile(optimizer=opt, loss=rmse_ann3, metrics=['mse', 'mae', 'mape',rmse_ann3])
+    
+    return ann_model
+
+def build_pnn():
+    pnn_model = Sequential([Dense(n_inputs,input_shape = X_train.shape[1:],kernel_initializer='normal', kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                              bias_regularizer=regularizers.l2(1e-4),activity_regularizer=regularizers.l2(1e-5)),
+                    BatchNormalization(),
+                     tfpl.DenseVariational(units=10,
+                          make_prior_fn=prior2,
+                          make_posterior_fn=posterior2,
+                          kl_weight=1/X_train.shape[0],activation =  "tanh"),
+                    tfpl.DenseVariational(units=10,
+                          make_prior_fn=prior2,
+                          make_posterior_fn=posterior2,
+                          kl_weight=1/X_train.shape[0],activation =  "tanh"),
+                    
+                    tfpl.DenseReparameterization( units = tfpl.IndependentNormal.params_size(1), activation=None,                                                
+        kernel_prior_fn = tfpl.default_multivariate_normal_fn,
+        kernel_posterior_fn = tfpl.default_mean_field_normal_fn(is_singular = False),
+        kernel_divergence_fn = divergence_fn,
+        bias_prior_fn = tfpl.default_multivariate_normal_fn,
+        bias_posterior_fn = tfpl.default_mean_field_normal_fn(is_singular = False),
+        bias_divergence_fn = divergence_fn ),
+                                                
+                    tfpl.IndependentNormal(1)
+                    
+                      ])
+    opt = ks.optimizers.RMSprop(lr_schedule)
+    pnn_model.compile(optimizer=opt, loss=nll2, metrics=['mse', 'mae', 'mape',rmse_ann4])
+    return pnn_model
+    
+    
+
+
+pnn1_clf = tf.keras.wrappers.scikit_learn.KerasRegressor(
+                            build_pnn,
+                            epochs=20,batch_size=64,validation_split=0.2,
+                            verbose=False)
+
+ann1_clf = tf.keras.wrappers.scikit_learn.KerasRegressor(
+                            build_nn,
+                            epochs=10,batch_size=64,validation_split=0.2,
+                            verbose=False)
+ann1_clf._estimator_type = 'regressor'
+
+pnn1_clf._estimator_type = 'regressor'
+
+
+stack = StackingCVRegressor(regressors=(models[8],models[0],models[6],models[7], pnn1_clf,ann1_clf,models[2]),
                             meta_regressor=models[9],
-                            cv = 5 , n_jobs=2,use_features_in_secondary=True)
+                            use_features_in_secondary=True,cv = 5,n_jobs = -1)
 
 print("\n Starting the fit, may taking a while")
 stack.fit(X_train,y_train.ravel())

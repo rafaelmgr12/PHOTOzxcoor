@@ -1,3 +1,4 @@
+import random
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,7 +7,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostClassifier, BaggingRegressor, StackingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor, BaggingRegressor, StackingRegressor
 
 # Other libraries
 
@@ -36,11 +37,63 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 
 
+def B_treeR(len_train_features,alg="Boost"):
+    """ Define a Boosted/Bagging Decision tree random
+    """
+    # DTR parameters
+    min_samples_s = list(range(2, 100, 2))
+    min_samples_leaf = list(range(2, 100, 2))
+    crit = ['mse', 'friedman_mse', 'mae']
+    split = ["best", "random"]
+    max_feat = ["auto", "sqrt", "log2"]
+    # Boost parmeter
+    n_estimator = list(range(200, 1000, 100))
+    l_rate = 10.0 ** -np.arange(0, 20)
+    loss = ['linear', 'square', 'exponential']
+    # Bagging parameters
+    max_samp = list(range(2, len_X, 1))
+    max_feat_b = list(range(2, len_X, 1))
+    boots = [False, True]
+    boots_feat = [False, True]
+    oob = [False, True]
+    warm = [False, True]
 
-def clean_tab(tab, col, val):
+    mss = random.choice(min_samples_s)
+    msl = random.choice(min_samples_leaf)
+    crt = random.choice(crit)
+    spt = random.choice(split)
+    mft = random.choice(max_feat)
+    nest = random.choice(n_estimator)
+    rate = random.choice(l_rate)
+    closs = random.choice(loss)
+    msb = random.choice(max_samp)
+    mfb = random.choice(max_feat_b)
+    bts = random.choice(boots)
+    btf = random.choice(boots_feat)
+    oobs = random.choice(oob)
+    #wrms = random.choice(warm)
+
+    tree = DecisionTreeRegressor(
+        criterion=crt, splitter=spt, min_samples_split=mss, min_samples_leaf=msl, max_features=mft)
+    if alg == "Boost":
+        bdt = AdaBoostRegressor(base_estimator=tree, n_estimators=nest,
+                                learning_rate=rate, loss=closs)
+        return bdt
+    if alg == "Bagging":
+        bdt = BaggingRegressor(base_estimator=tree, n_estimators=nest, max_samples=msb,
+                               max_features=mfb)#warm_start=wrms)
+        return bdt
+
+
+def clean_tab(tab, col, val, type_s=0):
     '''Function to clean the
- droping the row of values'''
-    tab.drop(tab[tab[col] > val].index, inplace=True)
+ droping the row of values. Using 0 for equal values,-1 less than and +1 for greater than.'''
+    if type_s == 0:
+        tab.drop(tab[tab[col] == val].index, inplace=True)
+    if type_s == -1:
+        tab.drop(tab[tab[col] < val].index, inplace=True)
+    if type_s == 1:
+        tab.drop(tab[tab[col] > val].index, inplace=True)
 
 
 def tts_split(X, y, size, splits):
@@ -225,6 +278,7 @@ def rmse_loss_keras(y_true, y_pred):
         (y_pred - y_true) / (keras.backend.abs(y_true) + 1))
     return keras.backend.sqrt(keras.backend.mean(diff))
 
+
 '''
 def build_nn(input_dim, shape, l2_rate=1e-5, l1_rate=1e-4, kernel_initializer, act_type="tanh",
 opt_type = ks.optimizers.RMSprop(),n_neurons = 10):
@@ -245,6 +299,8 @@ opt_type = ks.optimizers.RMSprop(),n_neurons = 10):
     return ann_model
 
 '''
+
+
 def model_nn(input_dim, n_hidden_layers, dropout=0, batch_normalization=False,
              activation='relu', neurons_decay=0, starting_power=1, l2=0,
              compile_model=True, trainable=True):
