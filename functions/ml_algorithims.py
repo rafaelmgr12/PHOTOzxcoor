@@ -308,7 +308,7 @@ def rmse_loss_keras(y_true, y_pred):
     return keras.backend.sqrt(keras.backend.mean(diff))
 
 
-def build_nn(n_inputs, shape):
+def build_nn(n_inputs, shape,len_dataset):
     BATCH_SIZE = 64
     STEPS_PER_EPOCH = (len_dataset)//BATCH_SIZE
     lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
