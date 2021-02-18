@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor, BaggingRegressor, StackingRegressor
-
+from lightgbm import LGBMRegressor
 # Other libraries
 
 from sklearn.model_selection import cross_val_score, KFold, train_test_split, ShuffleSplit
@@ -37,8 +37,27 @@ tfd = tfp.distributions
 tfpl = tfp.layers
 
 
-def B_treeR(len_train_features,alg="Boost"):
-    """ Define a Boosted/Bagging Decision tree random
+def random_lightGBM(len_dataset):
+
+    b_type = ["gbdt", "dart", "goss"]
+    l_rate = 10.0 ** -np.arange(0, 20)
+    n_estimator = list(range(200, 1000, 100))
+    num_leaves = list(range(31, 200, 10))
+
+    typee = random.choice(b_type)
+    rate = random.choice(l_rate)
+    nest = random.choice(n_estimator)
+    leaves = random.choice(num_leaves)
+    alpha = random.choice(l_rate)
+    lambd = random.choice(l_rate)
+
+    model = LGBMRegressor(boosting_type=typee, num_leaves=leaves,
+                          learning_rate=rate, n_estimators=nest, reg_alpha=alpha, reg_lambda=lambd)
+    return model
+
+
+def random_DTR(len_train_features, alg="Boost"):
+    """ Define a Boosted/Bagging  and Gradient Decision tree random
     """
     # DTR parameters
     min_samples_s = list(range(2, 100, 2))
@@ -51,12 +70,16 @@ def B_treeR(len_train_features,alg="Boost"):
     l_rate = 10.0 ** -np.arange(0, 20)
     loss = ['linear', 'square', 'exponential']
     # Bagging parameters
-    max_samp = list(range(2, len_X, 1))
-    max_feat_b = list(range(2, len_X, 1))
+    max_samp = list(range(2, len_train_features, 1))
+    max_feat_b = list(range(2, len_train_features, 1))
     boots = [False, True]
     boots_feat = [False, True]
     oob = [False, True]
-    warm = [False, True]
+   # warm = [False, True]
+    # Gradient parameters
+    loss_g = ['ls', 'lad', 'huber', 'quantile']
+    crit_g = ['mse', 'friedman_mse', 'mae']
+    max_depth = list(range(3, 40, 1))
 
     mss = random.choice(min_samples_s)
     msl = random.choice(min_samples_leaf)
@@ -72,6 +95,8 @@ def B_treeR(len_train_features,alg="Boost"):
     btf = random.choice(boots_feat)
     oobs = random.choice(oob)
     #wrms = random.choice(warm)
+    lsg = random.choice(loss_g)
+    mdt = random.choice(max_depth)
 
     tree = DecisionTreeRegressor(
         criterion=crt, splitter=spt, min_samples_split=mss, min_samples_leaf=msl, max_features=mft)
@@ -81,8 +106,12 @@ def B_treeR(len_train_features,alg="Boost"):
         return bdt
     if alg == "Bagging":
         bdt = BaggingRegressor(base_estimator=tree, n_estimators=nest, max_samples=msb,
-                               max_features=mfb)#warm_start=wrms)
+                               max_features=mfb)  # warm_start=wrms)
         return bdt
+    if alg == "Gradient":
+        gbt = GradientBoostingRegressor(loss=lsg, learning_rate=rate, n_estimators=nest,
+                                        criterion=crt, min_samples_split=mss, min_samples_leaf=msl, max_depth=mdt)
+        return gbt
 
 
 def clean_tab(tab, col, val, type_s=0):
@@ -279,42 +308,34 @@ def rmse_loss_keras(y_true, y_pred):
     return keras.backend.sqrt(keras.backend.mean(diff))
 
 
-'''
-def build_nn(input_dim, shape, l2_rate=1e-5, l1_rate=1e-4, kernel_initializer, act_type="tanh",
-opt_type = ks.optimizers.RMSprop(),n_neurons = 10):
-
-    ann_model = Sequential([Dense(n_inputs=input_dim, input_shape=shape, kernel_regularizer=regularizers.l1_l2(l1=l1_rate, l2=l2_rate),
-                                  bias_regularizer=regularizers.l2(l2_rate), activity_regularizer=regularizers.l2(l2_rate)),
-                            Dense(n_neurons, kernel_initializer=kernel_init,  kernel_constraint=max_norm(2.5), activation=act_type, kernel_regularizer=regularizers.l1_l2(l1=l1_rate, l2=l2_rate),
-                                  bias_regularizer=regularizers.l2(l2_rate), activity_regularizer=regularizers.l2(l2_rate)),
-                            BatchNormalization(),
-                            Dense(n_neurons, kernel_initializer=kernel_init, kernel_constraint=max_norm(2.5), activation=act_type, kernel_regularizer=regularizers.l1_l2(l1=l1_rate, l2=l2_rate),
-                                  bias_regularizer=regularizers.l2(l2_rate), activity_regularizer=regularizers.l2(l2_rate)),
-                            Dense(1, activation=None, name="output")
-                            ])
-    opt = opt_type
-    ann_model.compile(optimizer=opt, loss=rmse_ann, metrics=[
-                      'mse', 'mae', rmse_ann])
-
-    return ann_model
-
-'''
-
-
-def model_nn(input_dim, n_hidden_layers, dropout=0, batch_normalization=False,
-             activation='relu', neurons_decay=0, starting_power=1, l2=0,
-             compile_model=True, trainable=True):
+def model_nn(len_dataset, input_dim, n_hidden_layers, dropout=0, batch_normalization=False,
+             activation='tanh', neurons_decay=0, starting_power=1, l2=0,
+             compile_model=True, trainable=True, schedule=True):
     """Define an ANN with tanh activation"""
+
+    # Define a optmitzer
+    if schedule == True:
+        BATCH_SIZE = 64
+        STEPS_PER_EPOCH = (len_dataset)//BATCH_SIZE
+        lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
+            0.001,
+            decay_steps=STEPS_PER_EPOCH*1000,
+            decay_rate=1,
+            staircase=False)
+        opt = keras.optimizers.Adam(lr_schedule)
+    if schedule == False:
+        opt = keras.optimizers.Adam()
 
     assert dropout >= 0 and dropout < 1
     assert batch_normalization in {True, False}
     model = keras.models.Sequential()
 
     for layer in range(n_hidden_layers):
-        n_units = 2**(int(np.log2(input_dim)) +
-                      starting_power - layer*neurons_decay)
-        if n_units < 8:
-            n_units = 8
+        n_units = input_dim + 3
+        #n_units = 2**(int(np.log2(input_dim)) +
+        #              starting_power - layer*neurons_decay)
+        #if n_units < 8:
+        #    n_units = 8
         if layer == 0:
             model.add(Dense(units=n_units, input_dim=input_dim, name='Dense_' + str(layer + 1),
                             kernel_regularizer=keras.regularizers.l2(l2)))
@@ -332,6 +353,7 @@ def model_nn(input_dim, n_hidden_layers, dropout=0, batch_normalization=False,
                     kernel_regularizer=keras.regularizers.l2(l2)))
     model.trainable = trainable
     if compile_model:
-        model.compile(loss=rmse_loss_keras, optimizer=keras.optimizers.Adam())
+        model.compile(loss=rmse_loss_keras, optimizer=opt,
+                      metrics=['mse', 'mae', rmse_loss_keras])
 
     return model
