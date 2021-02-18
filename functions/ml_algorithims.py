@@ -308,6 +308,31 @@ def rmse_loss_keras(y_true, y_pred):
     return keras.backend.sqrt(keras.backend.mean(diff))
 
 
+def build_nn(n_inputs, shape):
+    BATCH_SIZE = 64
+    STEPS_PER_EPOCH = (len_dataset)//BATCH_SIZE
+    lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
+        0.001,
+        decay_steps=STEPS_PER_EPOCH*1000,
+        decay_rate=1,
+        staircase=False)
+    ann_model = Sequential([Dense(n_inputs, input_shape=shape, kernel_initializer='normal', kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                                  bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
+                            Dense(n_inputs + 3, kernel_initializer='normal',  kernel_constraint=max_norm(2.5), activation='tanh', kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                                  bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
+                            BatchNormalization(),
+                            Dense(n_inputs + 3, kernel_initializer='normal', kernel_constraint=max_norm(2.5), activation='tanh', kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                                  bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
+                            Dense(1, activation=None, name="output")
+                            ])
+    opt = ks.optimizers.RMSprop(lr_schedule)
+    #opt = tf.keras.optimizers.RMSprop(0.001)
+    ann_model.compile(optimizer=opt, loss=rmse_ann3,
+                      metrics=['mse', 'mae', rmse_ann3])
+
+    return ann_model
+
+
 def model_nn(len_dataset, input_dim, n_hidden_layers, dropout=0, batch_normalization=False,
              activation='tanh', neurons_decay=0, starting_power=1, l2=0,
              compile_model=True, trainable=True, schedule=True):
@@ -332,9 +357,9 @@ def model_nn(len_dataset, input_dim, n_hidden_layers, dropout=0, batch_normaliza
 
     for layer in range(n_hidden_layers):
         n_units = input_dim + 3
-        #n_units = 2**(int(np.log2(input_dim)) +
+        # n_units = 2**(int(np.log2(input_dim)) +
         #              starting_power - layer*neurons_decay)
-        #if n_units < 8:
+        # if n_units < 8:
         #    n_units = 8
         if layer == 0:
             model.add(Dense(units=n_units, input_dim=input_dim, name='Dense_' + str(layer + 1),
