@@ -4,6 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Regression Libraries
+# explicitly require this experimental feature
+from sklearn.experimental import enable_hist_gradient_boosting  # noqa
+# now you can import normally from ensemble
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
@@ -80,6 +84,10 @@ def random_DTR(len_train_features, alg="Boost"):
     loss_g = ['ls', 'lad', 'huber', 'quantile']
     crit_g = ['mse', 'friedman_mse', 'mae']
     max_depth = list(range(3, 40, 1))
+    # Hist GradientBoostingRegresso
+
+    loss_h = ["least_squares", "least_absolute_deviation", "poisson"]
+    m_iter = list(range(200, 1000, 100))
 
     mss = random.choice(min_samples_s)
     msl = random.choice(min_samples_leaf)
@@ -97,6 +105,8 @@ def random_DTR(len_train_features, alg="Boost"):
     #wrms = random.choice(warm)
     lsg = random.choice(loss_g)
     mdt = random.choice(max_depth)
+    l = random.choice(loss_h)
+    m = random.choice(m_iter)
 
     tree = DecisionTreeRegressor(
         criterion=crt, splitter=spt, min_samples_split=mss, min_samples_leaf=msl, max_features=mft)
@@ -112,7 +122,10 @@ def random_DTR(len_train_features, alg="Boost"):
         gbt = GradientBoostingRegressor(loss=lsg, learning_rate=rate, n_estimators=nest,
                                         criterion=crt, min_samples_split=mss, min_samples_leaf=msl, max_depth=mdt)
         return gbt
-
+    if alg == "Hist":
+        hist = HistGradientBoostingRegressor(
+            loss=l, learning_rate=rate, max_iter=m, max_depth=mdt, l2_regularization=1e-5, min_samples_leaf=msl)
+        return hist
 
 def clean_tab(tab, col, val, type_s=0):
     '''Function to clean the
@@ -232,11 +245,17 @@ def get_features_targets_des2(data):
         data['MAG_AUTO_Z_DERED'].values
     features[:, 3] = data['MAG_AUTO_Z_DERED'].values - \
         data['MAG_AUTO_Y_DERED'].values
-    # features[:, 4] = data['WAVG_MAG_PSF_G_DERED'] - data['WAVG_MAG_PSF_R_DERED']
-    # features[:, 5] = data['WAVG_MAG_PSF_R_DERED'] - data['WAVG_MAG_PSF_I_DERED']
-    # features[:, 6] = data['WAVG_MAG_PSF_I_DERED'] - data['WAVG_MAG_PSF_Z_DERED']
-    # features[:, 7] = data['WAVG_MAG_PSF_Z_DERED'] - data['WAVG_MAG_PSF_Y_DERED']
+    #features[:, 4] = data['WAVG_MAG_PSF_G_DERED'].values - \
+    #   data['WAVG_MAG_PSF_R_DERED'].values
+    #features[:, 5] = data['WAVG_MAG_PSF_R_DERED'].values - \
+    #    data['WAVG_MAG_PSF_I_DERED'].values
+    #features[:, 6] = data['WAVG_MAG_PSF_I_DERED'].values - \
+    #   data['WAVG_MAG_PSF_Z_DERED'].values
+    #features[:, 7] = data['WAVG_MAG_PSF_Z_DERED'].values - \
+    #  data['WAVG_MAG_PSF_Y_DERED'].values
+
     features[:, 4] = data["MAG_AUTO_I_DERED"].values
+    #features[:, 9] = data["WAVG_MAG_PSF_I_DERED"].values
 
     targets = data['z'].values
     return features, targets
@@ -274,7 +293,7 @@ def smote(X, y, n, k):
     knn = KNeighborsRegressor(k, "distance").fit(X, y)
     # choose random neighbors of random points
     ix = np.random.choice(len(X), n)
-    nn = knn.kneighbors(X[ix], return_distanec=False)
+    nn = knn.kneighbors(X[ix], return_distance=False)
     newY = knn.predict(X[ix])
     nni = np.random.choice(k, n)
     ix2 = np.array([n[i] for n, i in zip(nn, nni)])
@@ -286,12 +305,12 @@ def smote(X, y, n, k):
     return np.r_[X, newX], np.r_[y, newY]
 
 
-def gaussian_noise(X, y, sigma):
+def gaussian_noise(X, y, sigma, n):
     """
     Add gaussian noise to the dataset
     """
-    X = X.copy()
-    y = y.copy()
+    _X = X.copy()
+    _y = y.copy()
     for _ in range(n):
         X = np.r_[X, _X + np.random.randn(*_X.shape)*sigma]
         y = np.r_[y, _y]
@@ -308,7 +327,7 @@ def rmse_loss_keras(y_true, y_pred):
     return keras.backend.sqrt(keras.backend.mean(diff))
 
 
-def build_nn(n_inputs, shape,len_dataset):
+def build_nn(n_inputs, shape, len_dataset, activations):
     BATCH_SIZE = 64
     STEPS_PER_EPOCH = (len_dataset)//BATCH_SIZE
     lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
@@ -316,16 +335,20 @@ def build_nn(n_inputs, shape,len_dataset):
         decay_steps=STEPS_PER_EPOCH*1000,
         decay_rate=1,
         staircase=False)
+    n_units = list(range(n_inputs, n_inputs + 5, 1))
+
     ann_model = Sequential([Dense(n_inputs, input_shape=shape, kernel_initializer='normal', kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
                                   bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
-                            Dense(n_inputs + 3, kernel_initializer='normal',  kernel_constraint=max_norm(2.5), activation='tanh', kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                            Dense(random.choice(n_units), kernel_initializer='normal',  kernel_constraint=max_norm(2.5), activation=activations, kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
                                   bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
                             BatchNormalization(),
-                            Dense(n_inputs + 3, kernel_initializer='normal', kernel_constraint=max_norm(2.5), activation='tanh', kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                            Dense(random.choice(n_units), kernel_initializer='normal', kernel_constraint=max_norm(2.5), activation=activations, kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
                                   bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
                             Dense(1, activation=None, name="output")
                             ])
-    opt = ks.optimizers.RMSprop(lr_schedule)
+    list_opt = [ks.optimizers.Adam(lr_schedule), ks.optimizers.Adamax(lr_schedule), ks.optimizers.Adadelta(lr_schedule), ks.optimizers.Adagrad(lr_schedule),
+                ks.optimizers.RMSprop(lr_schedule), ]
+    opt = random.choice(list_opt)
     #opt = tf.keras.optimizers.RMSprop(0.001)
     ann_model.compile(optimizer=opt, loss=rmse_ann3,
                       metrics=['mse', 'mae', rmse_ann3])
@@ -381,4 +404,30 @@ def model_nn(len_dataset, input_dim, n_hidden_layers, dropout=0, batch_normaliza
         model.compile(loss=rmse_loss_keras, optimizer=opt,
                       metrics=['mse', 'mae', rmse_loss_keras])
 
+    return model
+
+
+def create_random_nn(input_shape, N_inputs):
+    """
+    Creates a CNN, based on random layer size.
+    Idea is to generate similar CNN models per function call.
+
+    Args:
+        input_shape: the input_shape of the model
+
+    Returns: a keras CNN model
+    """
+    weight_decay = 1e-4
+    num_classes = 10
+    model = Sequential()
+    model.add(Dense(N_inputs,
+                    kernel_regularizer=regularizers.l2(weight_decay),
+                    input_shape=input_shape))
+    model.add(Activation('tanh'))
+    model.add(BatchNormalization())
+    model.add(Conv2D(random.randint(16, 64), (3, 3), padding='same',
+                     kernel_regularizer=regularizers.l2(weight_decay)))
+    model.add(Activation('elu'))
+
+    model.add(Dense(1, name_output, activation='softmax'))
     return model
