@@ -329,15 +329,18 @@ def build_nn(n_inputs, shape, len_dataset, activations):
     BATCH_SIZE = 64
     STEPS_PER_EPOCH = (len_dataset)//BATCH_SIZE
     lr_schedule = tf.keras.optimizers.schedules.InverseTimeDecay(
-        0.00001,
+        0.0001,
         decay_steps=STEPS_PER_EPOCH*1000,
         decay_rate=1,
         staircase=False)
-    n_units = list(range(n_inputs, n_inputs + 5, 1))
+    n_units = list(range(20, n_inputs + 70, 1))
 
     ann_model = Sequential([Dense(n_inputs, input_shape=shape, kernel_initializer=tf.keras.initializers.Ones(), kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
                                   bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
                             Dense(random.choice(n_units), kernel_initializer='normal',  kernel_constraint=max_norm(2.5), activation=activations, kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                                  bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
+                            BatchNormalization(),
+                            Dense(random.choice(n_units), kernel_initializer='normal', kernel_constraint=max_norm(2.5), activation=activations, kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
                                   bias_regularizer=regularizers.l2(1e-4), activity_regularizer=regularizers.l2(1e-5)),
                             BatchNormalization(),
                             Dense(random.choice(n_units), kernel_initializer='normal', kernel_constraint=max_norm(2.5), activation=activations, kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
@@ -347,7 +350,7 @@ def build_nn(n_inputs, shape, len_dataset, activations):
     list_opt = [ks.optimizers.Adam(lr_schedule), ks.optimizers.RMSprop(lr_schedule)]
     opt = random.choice(list_opt)
     #opt = tf.keras.optimizers.RMSprop(0.001)
-    ann_model.compile(optimizer=opt, loss=rmse_ann3,
+    ann_model.compile(optimizer=opt, loss="mse",
                       metrics=['mse', 'mae', rmse_ann3])
 
     return ann_model
